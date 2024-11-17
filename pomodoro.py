@@ -1,11 +1,9 @@
 import sys
-import threading
 import psutil
 import time
 import os
 import pygame
 import tkinter as tk
-from tkinter import messagebox
 
 forbidden_processes = ['msedge.exe']
 working_time = 25 * 60
