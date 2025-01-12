@@ -56,15 +56,15 @@ class Timer:
 
 
 def kill_edge():
-    programm_was_killed = False
+    program_was_killed = False
     for process in psutil.process_iter(['pid', 'name']):
         if process.info['name'] in forbidden_processes:
             try:
                 os.kill(process.info['pid'], 9)
-                programm_was_killed = True
+                program_was_killed = True
             except Exception as e:
                 print(f"Failed to kill process {process.info['name']} with PID {process.info['pid']}: {e}")
-    return programm_was_killed
+    return program_was_killed
 
 
 def end_working_phase():
