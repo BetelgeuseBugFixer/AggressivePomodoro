@@ -131,9 +131,7 @@ def pop_up_window(text):
         pygame.mixer.music.stop()
         popup.destroy()
 
-
     ok_button.configure(command=stop_alarm_on_close)
-
 
     popup.bind("<Escape>", lambda event: stop_alarm_on_close())
 
@@ -241,18 +239,20 @@ def quit_program():
     sys.exit(0)
 
 
-def update_times():
-    global working_time, pause_time, big_pause_time, config
+def update_configs():
+    global working_time, pause_time, big_pause_time, session_per_cycle, config
 
     try:
         # load new times and convert to seconds
         working_time = int(working_entry.get()) * 60
         pause_time = int(pause_entry.get()) * 60
         big_pause_time = int(big_pause_entry.get()) * 60
+        session_per_cycle = int (sessions_entry.get())
 
         config["working_time"] = working_time
         config["pause_time"] = pause_time
         config["big_pause_time"] = big_pause_time
+        config["session_per_cycle"] = session_per_cycle
 
         save_config(config)
 
@@ -324,7 +324,14 @@ if __name__ == "__main__":
     big_pause_entry.insert(0, str(big_pause_time // 60))
     big_pause_entry.pack()
 
-    save_button = tk.Button(root, text="Save Times", command=update_times)
+    # Label + Entry für Sessions per Cycle
+    sessions_label = tk.Label(root, text="Sessions per Cycle:")
+    sessions_label.pack()
+    sessions_entry = tk.Entry(root)
+    sessions_entry.insert(0, str(session_per_cycle))
+    sessions_entry.pack()
+
+    save_button = tk.Button(root, text="Update Configs", command=update_configs)
     save_button.pack()
 
     pause_button = tk.Button(root, text="Pause", command=pause_timer)
