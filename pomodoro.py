@@ -1,4 +1,5 @@
 import sys
+import platform
 from tkinter import ttk
 import tkinter as tk
 import psutil
@@ -8,18 +9,30 @@ import pygame
 import json
 
 # define global variables
-CONFIG_FILE = "config.json"
-forbidden_processes = ['msedge.exe']
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
+
+if platform.system() == "Darwin":
+    forbidden_processes = ["Microsoft Edge"]
+else:
+    forbidden_processes = ["msedge.exe"]
+
 working_time = 25 * 60
 pause_time = 5 * 60
 big_pause_time = 15 * 60
 working_sessions = 0
-# define time (in seconds) after a working phase has started in which no app will be closed
 mercy_time = 30
 current_mode = "working"
 alarm = "clock-alarm-8761.mp3"
 timer = None
 session_per_cycle = 4
+
+# Theme colors per mode, used both for the window bg and for the ttk button style
+THEMES = {
+    "working": "lightcoral",
+    "pause": "lightgreen",
+    "big pause": "lightblue",
+}
 
 
 def load_config():
@@ -81,25 +94,33 @@ def kill_edge():
     for process in psutil.process_iter(['pid', 'name']):
         if process.info['name'] in forbidden_processes:
             try:
-                os.kill(process.info['pid'], 9)
+                process.kill()
                 program_was_killed = True
+            except psutil.NoSuchProcess:
+                pass
+            except psutil.AccessDenied:
+                print(f"Access denied to kill {process.info['name']} (PID: {process.info['pid']}).")
             except Exception as e:
-                print(f"Failed to kill process {process.info['name']} with PID {process.info['pid']}: {e}")
+                print(f"Failed to kill {process.info['name']}: {e}")
     return program_was_killed
 
 
-def set_theme(bg_color, fg_color="black"):
+def set_theme(mode):
+    bg_color = THEMES.get(mode, "lightcoral")
+    fg_color = "black"
+
     root.configure(bg=bg_color)
 
-    widgets = [
+    labels = [
         time_label, session_label, edge_label, paused_label,
-        working_label, pause_label, big_pause_label,
-        # working_entry, pause_entry, big_pause_entry,
-        pause_button, resume_button, next_button, quit_button, save_button
+        working_label, pause_label, big_pause_label, sessions_label,
     ]
-
-    for widget in widgets:
+    for widget in labels:
         widget.configure(bg=bg_color, fg=fg_color)
+
+    # set style
+    style.configure("Themed.TButton", background=bg_color, foreground=fg_color)
+    style.map("Themed.TButton", background=[("active", bg_color)])
 
 
 def pop_up_window(text):
@@ -121,7 +142,6 @@ def pop_up_window(text):
     ok_button = tk.Button(popup, text="OK", font=("Helvetica", 12), command=popup.destroy)
     ok_button.pack(pady=5)
 
-    # make it into a true pop up
     popup.transient(root)
     popup.grab_set()
     popup.focus_force()
@@ -132,9 +152,7 @@ def pop_up_window(text):
         popup.destroy()
 
     ok_button.configure(command=stop_alarm_on_close)
-
     popup.bind("<Escape>", lambda event: stop_alarm_on_close())
-
     popup.wait_window()
 
 
@@ -178,13 +196,12 @@ def update_ui():
 
     if current_mode == "working":
         target_time = working_time
-        set_theme("lightcoral")
     elif current_mode == "pause":
         target_time = pause_time
-        set_theme("lightgreen")
     else:
         target_time = big_pause_time
-        set_theme("lightblue")
+
+    set_theme(current_mode)
 
     elapsed = int(timer.elapsed())
 
@@ -200,7 +217,6 @@ def update_ui():
     if current_mode == "working":
         if timer.elapsed() > working_time:
             end_working_phase()
-
         elif timer.elapsed() > mercy_time:
             if kill_edge():
                 edge_kill_counter += 1
@@ -208,7 +224,6 @@ def update_ui():
     elif current_mode == "pause":
         if timer.elapsed() > pause_time:
             end_pause_phase()
-
 
     elif current_mode == "big pause":
         if timer.elapsed() > big_pause_time:
@@ -247,7 +262,7 @@ def update_configs():
         working_time = int(working_entry.get()) * 60
         pause_time = int(pause_entry.get()) * 60
         big_pause_time = int(big_pause_entry.get()) * 60
-        session_per_cycle = int (sessions_entry.get())
+        session_per_cycle = int(sessions_entry.get())
 
         config["working_time"] = working_time
         config["pause_time"] = pause_time
@@ -274,7 +289,6 @@ if __name__ == "__main__":
         session_per_cycle = config["session_per_cycle"]
         forbidden_processes = config["forbidden_processes"]
     else:
-        # if we do not have a config file, we create it
         config = {"working_time": working_time, "pause_time": pause_time, "big_pause_time": big_pause_time,
                   "mercy_time": mercy_time, "session_per_cycle": session_per_cycle,
                   "forbidden_processes": forbidden_processes, }
@@ -286,6 +300,9 @@ if __name__ == "__main__":
 
     root = tk.Tk()
     root.title("Pomodoro Timer")
+
+    style = ttk.Style()
+    style.theme_use("clam")
 
     time_label = tk.Label(root, text="", font=("Helvetica", 18))
     time_label.pack()
@@ -303,47 +320,43 @@ if __name__ == "__main__":
     progressbar = ttk.Progressbar()
     progressbar.pack()
 
-    # Label + Entry für Working Time
     working_label = tk.Label(root, text="Working Time (Minutes):")
     working_label.pack()
     working_entry = tk.Entry(root)
     working_entry.insert(0, str(working_time // 60))
     working_entry.pack()
 
-    # Label + Entry für Pause Time
     pause_label = tk.Label(root, text="Pause Time (Minutes):")
     pause_label.pack()
     pause_entry = tk.Entry(root)
     pause_entry.insert(0, str(pause_time // 60))
     pause_entry.pack()
 
-    # Label + Entry für Big Pause Time
     big_pause_label = tk.Label(root, text="Big Pause Time (Minutes):")
     big_pause_label.pack()
     big_pause_entry = tk.Entry(root)
     big_pause_entry.insert(0, str(big_pause_time // 60))
     big_pause_entry.pack()
 
-    # Label + Entry für Sessions per Cycle
     sessions_label = tk.Label(root, text="Sessions per Cycle:")
     sessions_label.pack()
     sessions_entry = tk.Entry(root)
     sessions_entry.insert(0, str(session_per_cycle))
     sessions_entry.pack()
 
-    save_button = tk.Button(root, text="Update Configs", command=update_configs)
+    save_button = ttk.Button(root, text="Update Configs", command=update_configs, style="Themed.TButton")
     save_button.pack()
 
-    pause_button = tk.Button(root, text="Pause", command=pause_timer)
+    pause_button = ttk.Button(root, text="Pause", command=pause_timer, style="Themed.TButton")
     pause_button.pack(side=tk.LEFT)
 
-    next_button = tk.Button(root, text="Next Phase", command=next_phase)
+    next_button = ttk.Button(root, text="Next Phase", command=next_phase, style="Themed.TButton")
     next_button.pack(side=tk.LEFT)
 
-    resume_button = tk.Button(root, text="Resume", command=resume_timer)
+    resume_button = ttk.Button(root, text="Resume", command=resume_timer, style="Themed.TButton")
     resume_button.pack(side=tk.LEFT)
 
-    quit_button = tk.Button(root, text="Quit", command=quit_program)
+    quit_button = ttk.Button(root, text="Quit", command=quit_program, style="Themed.TButton")
     quit_button.pack(side=tk.LEFT)
 
     root.after(1000, update_ui)
