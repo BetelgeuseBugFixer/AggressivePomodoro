@@ -23,7 +23,7 @@ big_pause_time = 15 * 60
 working_sessions = 0
 mercy_time = 30
 current_mode = "working"
-alarm = "clock-alarm-8761.mp3"
+alarm = os.path.join(SCRIPT_DIR, "clock-alarm-8761.mp3")
 timer = None
 session_per_cycle = 4
 
@@ -99,7 +99,7 @@ def kill_edge():
             except psutil.NoSuchProcess:
                 pass
             except psutil.AccessDenied:
-                print(f"Access denied to kill {process.info['name']} (PID: {process.info['pid']}).")
+                print(f"Access denied to kill {process.info['name']} (PID: {process.info['pid']}). ")
             except Exception as e:
                 print(f"Failed to kill {process.info['name']}: {e}")
     return program_was_killed
@@ -111,20 +111,17 @@ def set_theme(mode):
 
     root.configure(bg=bg_color)
 
-    labels = [
-        time_label, session_label, edge_label, paused_label,
-        working_label, pause_label, big_pause_label, sessions_label,
-    ]
+    # Plain tk.Label widgets respect bg/fg fine on macOS, so only these get
+    # recolored. Buttons are deliberately left at their default system look
+    # (see the mac notes: forcing ttk 'clam' to color buttons causes a
+    # black-box rendering bug on some Tcl/Tk builds).
+    labels = [time_label, session_label, edge_label, paused_label]
     for widget in labels:
         widget.configure(bg=bg_color, fg=fg_color)
 
-    # set style
-    style.configure("Themed.TButton", background=bg_color, foreground=fg_color)
-    style.map("Themed.TButton", background=[("active", bg_color)])
-
 
 def pop_up_window(text):
-    root.deiconify()  # make root visible again if it was minimized
+    root.deiconify()
     root.lift()
     # create pop up
     popup = tk.Toplevel()
@@ -254,15 +251,23 @@ def quit_program():
     sys.exit(0)
 
 
-def update_configs():
+def update_configs(settings_window, working_entry, pause_entry, big_pause_entry, sessions_entry, error_label):
     global working_time, pause_time, big_pause_time, session_per_cycle, config
 
     try:
-        # load new times and convert to seconds
-        working_time = int(working_entry.get()) * 60
-        pause_time = int(pause_entry.get()) * 60
-        big_pause_time = int(big_pause_entry.get()) * 60
-        session_per_cycle = int(sessions_entry.get())
+        new_working_time = int(working_entry.get()) * 60
+        new_pause_time = int(pause_entry.get()) * 60
+        new_big_pause_time = int(big_pause_entry.get()) * 60
+        new_session_per_cycle = int(sessions_entry.get())
+
+        if min(new_working_time, new_pause_time, new_big_pause_time, new_session_per_cycle) <= 0:
+            error_label.config(text="All values must be positive numbers")
+            return
+
+        working_time = new_working_time
+        pause_time = new_pause_time
+        big_pause_time = new_big_pause_time
+        session_per_cycle = new_session_per_cycle
 
         config["working_time"] = working_time
         config["pause_time"] = pause_time
@@ -270,9 +275,52 @@ def update_configs():
         config["session_per_cycle"] = session_per_cycle
 
         save_config(config)
+        settings_window.destroy()
 
     except ValueError:
-        print("Invalid time value(s)")
+        error_label.config(text="Please enter whole numbers only")
+
+
+def open_settings():
+    settings_window = tk.Toplevel(root)
+    settings_window.title("Settings")
+    settings_window.resizable(False, False)
+    settings_window.transient(root)
+    settings_window.grab_set()
+
+    tk.Label(settings_window, text="Working Time (Minutes):").pack(padx=20, pady=(15, 0))
+    working_entry = tk.Entry(settings_window)
+    working_entry.insert(0, str(working_time // 60))
+    working_entry.pack(padx=20)
+
+    tk.Label(settings_window, text="Pause Time (Minutes):").pack(padx=20, pady=(10, 0))
+    pause_entry = tk.Entry(settings_window)
+    pause_entry.insert(0, str(pause_time // 60))
+    pause_entry.pack(padx=20)
+
+    tk.Label(settings_window, text="Big Pause Time (Minutes):").pack(padx=20, pady=(10, 0))
+    big_pause_entry = tk.Entry(settings_window)
+    big_pause_entry.insert(0, str(big_pause_time // 60))
+    big_pause_entry.pack(padx=20)
+
+    tk.Label(settings_window, text="Sessions per Cycle:").pack(padx=20, pady=(10, 0))
+    sessions_entry = tk.Entry(settings_window)
+    sessions_entry.insert(0, str(session_per_cycle))
+    sessions_entry.pack(padx=20)
+
+    error_label = tk.Label(settings_window, text="", fg="red")
+    error_label.pack(pady=(8, 0))
+
+    save_button = tk.Button(
+        settings_window, text="Save",
+        command=lambda: update_configs(
+            settings_window, working_entry, pause_entry, big_pause_entry, sessions_entry, error_label
+        )
+    )
+    save_button.pack(pady=(10, 15))
+
+    settings_window.bind("<Escape>", lambda event: settings_window.destroy())
+    settings_window.focus_force()
 
 
 if __name__ == "__main__":
@@ -300,12 +348,10 @@ if __name__ == "__main__":
 
     root = tk.Tk()
     root.title("Pomodoro Timer")
-
-    style = ttk.Style()
-    style.theme_use("clam")
+    root.geometry("320x220")
 
     time_label = tk.Label(root, text="", font=("Helvetica", 18))
-    time_label.pack()
+    time_label.pack(pady=(15, 5))
 
     session_label = tk.Label(root, text="", font=("Helvetica", 14))
     session_label.pack()
@@ -317,47 +363,26 @@ if __name__ == "__main__":
     paused_label.pack()
 
     progress = tk.DoubleVar()
-    progressbar = ttk.Progressbar()
-    progressbar.pack()
+    progressbar = ttk.Progressbar(root)
+    progressbar.pack(fill=tk.X, padx=20, pady=10)
 
-    working_label = tk.Label(root, text="Working Time (Minutes):")
-    working_label.pack()
-    working_entry = tk.Entry(root)
-    working_entry.insert(0, str(working_time // 60))
-    working_entry.pack()
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=10)
 
-    pause_label = tk.Label(root, text="Pause Time (Minutes):")
-    pause_label.pack()
-    pause_entry = tk.Entry(root)
-    pause_entry.insert(0, str(pause_time // 60))
-    pause_entry.pack()
+    pause_button = tk.Button(button_frame, text="Pause", command=pause_timer)
+    pause_button.pack(side=tk.LEFT, padx=3)
 
-    big_pause_label = tk.Label(root, text="Big Pause Time (Minutes):")
-    big_pause_label.pack()
-    big_pause_entry = tk.Entry(root)
-    big_pause_entry.insert(0, str(big_pause_time // 60))
-    big_pause_entry.pack()
+    resume_button = tk.Button(button_frame, text="Resume", command=resume_timer)
+    resume_button.pack(side=tk.LEFT, padx=3)
 
-    sessions_label = tk.Label(root, text="Sessions per Cycle:")
-    sessions_label.pack()
-    sessions_entry = tk.Entry(root)
-    sessions_entry.insert(0, str(session_per_cycle))
-    sessions_entry.pack()
+    next_button = tk.Button(button_frame, text="Next Phase", command=next_phase)
+    next_button.pack(side=tk.LEFT, padx=3)
 
-    save_button = ttk.Button(root, text="Update Configs", command=update_configs, style="Themed.TButton")
-    save_button.pack()
+    settings_button = tk.Button(button_frame, text="Settings", command=open_settings)
+    settings_button.pack(side=tk.LEFT, padx=3)
 
-    pause_button = ttk.Button(root, text="Pause", command=pause_timer, style="Themed.TButton")
-    pause_button.pack(side=tk.LEFT)
-
-    next_button = ttk.Button(root, text="Next Phase", command=next_phase, style="Themed.TButton")
-    next_button.pack(side=tk.LEFT)
-
-    resume_button = ttk.Button(root, text="Resume", command=resume_timer, style="Themed.TButton")
-    resume_button.pack(side=tk.LEFT)
-
-    quit_button = ttk.Button(root, text="Quit", command=quit_program, style="Themed.TButton")
-    quit_button.pack(side=tk.LEFT)
+    quit_button = tk.Button(button_frame, text="Quit", command=quit_program)
+    quit_button.pack(side=tk.LEFT, padx=3)
 
     root.after(1000, update_ui)
     root.mainloop()
