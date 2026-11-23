@@ -131,7 +131,7 @@ def pop_up_window(text):
 
     # play alarm
     pygame.mixer.music.load(alarm)
-    pygame.mixer.music.play(loops=-1)
+    pygame.mixer.music.play(loops=5)
 
     label = tk.Label(popup, text=text, font=("Helvetica", 14))
     label.pack(padx=20, pady=10)
